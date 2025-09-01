@@ -1,0 +1,33 @@
+{
+  "symbol": "VOO",
+  "timestamp": 1756753461891,
+  "data": {
+    "symbol": "VOO",
+    "quote": {
+      "Information": "We have detected your API key as SHI8D6DGZYT509H7 and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+    },
+    "overview": {
+      "Information": "We have detected your API key as SHI8D6DGZYT509H7 and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+    },
+    "earnings": {
+      "Information": "We have detected your API key as SHI8D6DGZYT509H7 and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+    },
+    "historical": {
+      "Information": "We have detected your API key as SHI8D6DGZYT509H7 and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+    },
+    "analysis": {
+      "expectedReturn": 0.08,
+      "method": "default",
+      "confidence": "low",
+      "calculatedAt": "2025-09-01T19:04:21.890Z",
+      "userOverride": null
+    },
+    "lastUpdated": "2025-09-01T19:04:21.891Z",
+    "dataQuality": {
+      "score": 0,
+      "maxScore": 4,
+      "percentage": 0,
+      "quality": "low"
+    }
+  }
+}
