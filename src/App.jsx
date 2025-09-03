@@ -62,6 +62,20 @@ const PortfolioAnalyzer = () => {
   // Use popular securities cache or fallback
   const stockDatabase = popularSecurities.length > 0 ? popularSecurities : fallbackStockDatabase;
 
+  // Helper function to get contribution frequency multiplier
+  const getFrequencyMultiplier = (frequency) => {
+    switch (frequency) {
+      case 'weekly': return 52;
+      case 'biweekly': return 26;
+      case 'semi-monthly': return 24; // Twice per month
+      case 'monthly': return 12;
+      case 'quarterly': return 4;
+      case 'semi-annually': return 2;
+      case 'yearly': return 1;
+      default: return 12; // Default to monthly
+    }
+  };
+
   // Function to refresh popular securities cache (call this manually or on a schedule)
   const refreshPopularSecurities = async () => {
     try {
@@ -237,7 +251,7 @@ const PortfolioAnalyzer = () => {
         return {
           symbol,
           currentPrice: parseFloat(quote['05. price']),
-          expectedAnnualReturn: analysis.expectedAnnualReturn,
+          expectedAnnualReturn: analysis.expectedReturn,
           change: parseFloat(quote['09. change'] || 0),
           isRealData: true,
           // Additional data for enhanced display
@@ -339,7 +353,7 @@ const PortfolioAnalyzer = () => {
       const contributionSchedule = securityData.map(security => {
         const monthlyContribution = parseFloat(security.contribution);
         const frequency = security.frequency;
-        const contributionsPerYear = frequency === 'monthly' ? 12 : frequency === 'quarterly' ? 4 : 1;
+        const contributionsPerYear = getFrequencyMultiplier(frequency);
         const totalContributions = monthlyContribution * contributionsPerYear * durationYears;
         
         const avgReturn = security.data.expectedAnnualReturn;
@@ -366,6 +380,8 @@ const PortfolioAnalyzer = () => {
           totalContributions,
           totalValue,
           totalGain,
+          // CAGR formula: ((Final Value / Initial Value)^(1/Years)) - 1
+          // Now meaningful because totalValue uses realistic market-based expected returns
           annualizedReturn: Math.pow(totalValue / totalContributions, 1 / durationYears) - 1
         },
         benchmark: { value: sp500Value, annualizedReturn: 0.10 }
@@ -377,7 +393,7 @@ const PortfolioAnalyzer = () => {
     }
   };
 
-  // Growth chart data
+  // Enhanced growth chart data with individual securities
   const growthChartData = results ? (() => {
     const durationYears = parseInt(duration);
     const data = [];
@@ -386,38 +402,78 @@ const PortfolioAnalyzer = () => {
       let totalContributions = 0;
       let totalPortfolioValue = 0;
       
+      const dataPoint = {
+        year: year,
+        contributions: 0,
+        portfolio: 0,
+        sp500: 0
+      };
+      
+      // Calculate individual security values and portfolio totals
       results.securities.forEach(security => {
-        const annualContrib = parseFloat(security.contribution) * 
-          (security.frequency === 'monthly' ? 12 : security.frequency === 'quarterly' ? 4 : 1);
+        const annualContrib = parseFloat(security.contribution) * getFrequencyMultiplier(security.frequency);
         
         const contribToDate = annualContrib * year;
         totalContributions += contribToDate;
         
+        let securityValue = 0;
         if (year > 0) {
-          const value = annualContrib * ((Math.pow(1 + security.data.expectedAnnualReturn, year) - 1) / security.data.expectedAnnualReturn);
-          totalPortfolioValue += value;
+          securityValue = annualContrib * ((Math.pow(1 + security.data.expectedAnnualReturn, year) - 1) / security.data.expectedAnnualReturn);
+          totalPortfolioValue += securityValue;
         }
+        
+        // Add individual security data to chart
+        dataPoint[`security_${security.symbol}`] = Math.round(securityValue);
       });
       
       const sp500Value = year > 0 ? 
         (totalContributions / year) * ((Math.pow(1.10, year) - 1) / 0.10) : 0;
       
-      data.push({
-        year: year,
-        contributions: Math.round(totalContributions),
-        portfolio: Math.round(totalPortfolioValue),
-        sp500: Math.round(sp500Value)
-      });
+      dataPoint.contributions = Math.round(totalContributions);
+      dataPoint.portfolio = Math.round(totalPortfolioValue);
+      dataPoint.sp500 = Math.round(sp500Value);
+      
+      data.push(dataPoint);
     }
     
     return data;
   })() : [];
 
-  const [visibleLines, setVisibleLines] = useState({
-    contributions: true,
-    portfolio: true,
-    sp500: true
-  });
+  // Initialize visibility state with individual securities hidden by default
+  const getInitialVisibility = () => {
+    const visibility = {
+      contributions: true,
+      portfolio: true,
+      sp500: true
+    };
+    
+    // Add individual securities (hidden by default)
+    if (results && results.securities) {
+      results.securities.forEach(security => {
+        visibility[`security_${security.symbol}`] = false;
+      });
+    }
+    
+    return visibility;
+  };
+
+  const [visibleLines, setVisibleLines] = useState(getInitialVisibility());
+  
+  // Update visibility when results change
+  React.useEffect(() => {
+    if (results) {
+      setVisibleLines(prev => {
+        const newVisibility = { ...prev };
+        results.securities.forEach(security => {
+          const key = `security_${security.symbol}`;
+          if (!(key in newVisibility)) {
+            newVisibility[key] = false; // Hidden by default
+          }
+        });
+        return newVisibility;
+      });
+    }
+  }, [results]);
 
   const toggleLineVisibility = (key) => {
     setVisibleLines(prev => ({ ...prev, [key]: !prev[key] }));
@@ -431,23 +487,23 @@ const PortfolioAnalyzer = () => {
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff00ff'];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Portfolio Investment Analyzer</h1>
-          <p className="text-gray-600">Smart search, live data, and growth visualization</p>
+        <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Portfolio Investment Analyzer</h1>
+          <p className="text-sm sm:text-base text-gray-600">Smart search, live data, and growth visualization</p>
         </div>
 
         {/* Input Section */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Investment Configuration</h2>
+        <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Investment Configuration</h2>
           
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">Securities & Contributions</label>
             {securities.map((security) => (
-              <div key={security.id} className="flex gap-4 mb-3 items-center relative">
+              <div key={security.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-3 items-stretch sm:items-center relative">
                 <div className="flex-1 relative">
                   <div className="relative">
                     <input
@@ -455,7 +511,7 @@ const PortfolioAnalyzer = () => {
                       placeholder="Search (e.g., Apple, AAPL)"
                       value={security.symbol}
                       onChange={(e) => handleSymbolInput(security.id, e.target.value)}
-                      className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-base"
                     />
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                   </div>
@@ -477,23 +533,29 @@ const PortfolioAnalyzer = () => {
                   )}
                 </div>
                 
-                <input
-                  type="number"
-                  placeholder="Amount ($)"
-                  value={security.contribution}
-                  onChange={(e) => updateSecurity(security.id, 'contribution', e.target.value)}
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                />
-                
-                <select
-                  value={security.frequency}
-                  onChange={(e) => updateSecurity(security.id, 'frequency', e.target.value)}
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
+                <div className="flex gap-2 sm:contents">
+                  <input
+                    type="number"
+                    placeholder="Amount ($)"
+                    value={security.contribution}
+                    onChange={(e) => updateSecurity(security.id, 'contribution', e.target.value)}
+                    className="flex-1 sm:w-32 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-base"
+                  />
+                  
+                  <select
+                    value={security.frequency}
+                    onChange={(e) => updateSecurity(security.id, 'frequency', e.target.value)}
+                    className="flex-1 sm:w-40 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-base"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Bi-weekly</option>
+                    <option value="semi-monthly">Semi-monthly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="semi-annually">Semi-annually</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
                 
                 {securities.length > 1 && (
                   <button onClick={() => removeSecurity(security.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-md">
@@ -503,7 +565,7 @@ const PortfolioAnalyzer = () => {
               </div>
             ))}
             
-            <button onClick={addSecurity} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+            <button onClick={addSecurity} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-base">
               <Plus size={16} /> Add Security
             </button>
           </div>
@@ -515,14 +577,14 @@ const PortfolioAnalyzer = () => {
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               placeholder="e.g., 10"
-              className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-32 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-base"
             />
           </div>
 
           <button
             onClick={calculatePortfolioPerformance}
             disabled={loading || !duration || securities.some(s => !s.symbol || !s.contribution)}
-            className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 text-base"
           >
             {loading ? 'Loading...' : <><Calculator size={16} /> Calculate Portfolio</>}
           </button>
@@ -532,8 +594,8 @@ const PortfolioAnalyzer = () => {
         {results && (
           <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Portfolio Value</p>
@@ -543,7 +605,7 @@ const PortfolioAnalyzer = () => {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Gain</p>
@@ -553,7 +615,7 @@ const PortfolioAnalyzer = () => {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Annualized Return</p>
@@ -566,52 +628,99 @@ const PortfolioAnalyzer = () => {
 
             {/* Growth Chart */}
             {growthChartData.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Portfolio Growth Over Time</h3>
                 
                 {/* Interactive Legend */}
-                <div className="mb-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => toggleLineVisibility('contributions')}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
-                      visibleLines.contributions ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    Principal
-                  </button>
-                  
-                  <button
-                    onClick={() => toggleLineVisibility('portfolio')}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
-                      visibleLines.portfolio ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-                    Portfolio
-                  </button>
-                  
-                  <button
-                    onClick={() => toggleLineVisibility('sp500')}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
-                      visibleLines.sp500 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-                    S&P 500
-                  </button>
+                <div className="mb-4">
+                  {/* Primary chart lines */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <button
+                      onClick={() => toggleLineVisibility('contributions')}
+                      className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
+                        visibleLines.contributions ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                      Principal
+                    </button>
+                    
+                    <button
+                      onClick={() => toggleLineVisibility('portfolio')}
+                      className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
+                        visibleLines.portfolio ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+                      Total Portfolio
+                    </button>
+                    
+                    <button
+                      onClick={() => toggleLineVisibility('sp500')}
+                      className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm ${
+                        visibleLines.sp500 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+                      S&P 500
+                    </button>
+                  </div>
+
+                  {/* Individual securities (expandable) */}
+                  {results && results.securities && results.securities.length > 1 && (
+                    <div className="border-t pt-3">
+                      <p className="text-xs text-gray-500 mb-2">Individual Securities (click to show):</p>
+                      <div className="flex flex-wrap gap-2">
+                        {results.securities.map((security, index) => {
+                          const key = `security_${security.symbol}`;
+                          const colors = [
+                            'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 
+                            'bg-orange-500', 'bg-teal-500', 'bg-red-500',
+                            'bg-emerald-500', 'bg-cyan-500', 'bg-lime-500'
+                          ];
+                          const colorClass = colors[index % colors.length];
+                          const isVisible = visibleLines[key];
+                          
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => toggleLineVisibility(key)}
+                              className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs ${
+                                isVisible 
+                                  ? `bg-opacity-20 text-gray-800 ${colorClass.replace('bg-', 'bg-').replace('-500', '-100')}` 
+                                  : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className={`w-2 h-2 rounded-full ${isVisible ? colorClass : 'bg-gray-300'}`}></div>
+                              {security.symbol}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <ResponsiveContainer width="100%" height={400}>
+                <ResponsiveContainer width="100%" height={320} className="sm:h-96">
                   <LineChart data={growthChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="year" label={{ value: 'Years', position: 'insideBottom', offset: -10 }} />
                     <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
                     <Tooltip 
-                      formatter={(value, name) => [
-                        `$${parseInt(value).toLocaleString()}`, 
-                        name === 'contributions' ? 'Principal' : name === 'portfolio' ? 'Portfolio' : 'S&P 500'
-                      ]}
+                      formatter={(value, name) => {
+                        let displayName = name;
+                        if (name === 'contributions') displayName = 'Principal';
+                        else if (name === 'portfolio') displayName = 'Total Portfolio';
+                        else if (name === 'sp500') displayName = 'S&P 500';
+                        else if (name.startsWith('security_')) {
+                          displayName = name.replace('security_', '');
+                        }
+                        
+                        return [
+                          `$${parseInt(value).toLocaleString()}`, 
+                          displayName
+                        ];
+                      }}
                       labelFormatter={(year) => `Year ${year}`}
                     />
                     
@@ -626,30 +735,52 @@ const PortfolioAnalyzer = () => {
                     {visibleLines.sp500 && (
                       <Line type="monotone" dataKey="sp500" stroke="#2ca02c" strokeWidth={2} dot={false} />
                     )}
+
+                    {/* Individual security lines */}
+                    {results && results.securities.map((security, index) => {
+                      const key = `security_${security.symbol}`;
+                      const colors = [
+                        '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', 
+                        '#14b8a6', '#ef4444', '#10b981', '#06b6d4', '#84cc16'
+                      ];
+                      const strokeColor = colors[index % colors.length];
+                      
+                      return visibleLines[key] && (
+                        <Line 
+                          key={key}
+                          type="monotone" 
+                          dataKey={key} 
+                          stroke={strokeColor} 
+                          strokeWidth={2} 
+                          strokeDasharray="3 3"
+                          dot={false} 
+                        />
+                      );
+                    })}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             )}
 
             {/* Performance Table */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Security Performance & Analysis</h3>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Security</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Price</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Return</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Analysis</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Projected Value</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gain</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Security</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Analysis</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                      <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gain</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {results.securities.map((security, index) => (
                       <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-3 sm:px-6 py-4 text-sm font-medium text-gray-900">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold">{security.symbol}</span>
@@ -673,7 +804,7 @@ const PortfolioAnalyzer = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-900">
                           <div className="flex flex-col">
                             <span>${security.data.currentPrice.toFixed(2)}</span>
                             {security.data.analystTarget && (
@@ -683,7 +814,7 @@ const PortfolioAnalyzer = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-900">
                           <div className="flex flex-col">
                             <span className="font-medium">
                               {(security.data.expectedAnnualReturn * 100).toFixed(1)}%
@@ -698,7 +829,7 @@ const PortfolioAnalyzer = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
                           <div className="flex flex-col">
                             <span className="capitalize">
                               {security.data.analysisMethod ? 
@@ -716,8 +847,8 @@ const PortfolioAnalyzer = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${security.projectedValue.toLocaleString()}</td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm ${security.gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-900">${security.projectedValue.toLocaleString()}</td>
+                        <td className={`px-3 sm:px-6 py-4 text-sm ${security.gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           ${security.gain.toLocaleString()}
                         </td>
                       </tr>

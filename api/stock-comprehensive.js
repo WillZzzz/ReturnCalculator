@@ -32,7 +32,6 @@ export default async function handler(req, res) {
     // Check cache first
     const cachedData = await getCachedData(symbolUpper);
     if (cachedData) {
-      console.log(`Using cached comprehensive data for ${symbolUpper} (age: ${Math.round((Date.now() - cachedData.timestamp) / 1000 / 60)} minutes)`);
       return res.status(200).json(cachedData.data);
     }
 
@@ -140,22 +139,88 @@ function calculateExpectedReturn(data) {
   let expectedReturn = 0.08; // Default fallback
   let method = 'default';
   let confidence = 'low';
+  let components = {};
 
   try {
-    // Method 1: Analyst Target Price (highest priority)
+    // Method 1: Blended approach (analyst target + multi-year trends)
     if (data.overview && data.overview['AnalystTargetPrice'] && data.quote) {
       const currentPrice = parseFloat(data.quote['Global Quote']['05. price']);
       const targetPrice = parseFloat(data.overview['AnalystTargetPrice']);
       
       if (currentPrice > 0 && targetPrice > 0) {
-        // Assume 1-year target, convert to annual return
-        const impliedReturn = (targetPrice / currentPrice) - 1;
+        const analystReturn = (targetPrice / currentPrice) - 1;
         
-        // Sanity check: cap between -50% and +100%
-        if (impliedReturn >= -0.5 && impliedReturn <= 1.0) {
-          expectedReturn = impliedReturn;
-          method = 'analyst_target';
-          confidence = 'high';
+        // Sanity check analyst return: cap between -50% and +100%
+        if (analystReturn >= -0.5 && analystReturn <= 1.0) {
+          components.analyst = analystReturn;
+          
+          // Try to get multi-year EPS trend for blending
+          let epsReturn = null;
+          if (data.earnings && data.earnings.annualEarnings && data.earnings.annualEarnings.length >= 3) {
+            const earnings = data.earnings.annualEarnings;
+            const recent = parseFloat(earnings[0].reportedEPS);
+            const threeYearAgo = parseFloat(earnings[2].reportedEPS);
+            
+            if (recent > 0 && threeYearAgo > 0) {
+              // Calculate 3-year CAGR for EPS
+              const epsCAGR = Math.pow(recent / threeYearAgo, 1/3) - 1;
+              if (epsCAGR >= -0.3 && epsCAGR <= 0.5) { // Reasonable bounds
+                epsReturn = epsCAGR * 0.8; // Conservative discount
+                components.eps3year = epsReturn;
+              }
+            }
+          }
+          
+          // Try to get 3-year historical return for blending
+          let historicalReturn = null;
+          if (data.historical && data.historical['Monthly Time Series']) {
+            const monthlyData = data.historical['Monthly Time Series'];
+            const dates = Object.keys(monthlyData).sort().reverse();
+            
+            if (dates.length >= 36) { // Need at least 3 years
+              const recentPrice = parseFloat(monthlyData[dates[0]]['4. close']);
+              const threeYearAgoPrice = parseFloat(monthlyData[dates[35]]['4. close']);
+              
+              if (recentPrice > 0 && threeYearAgoPrice > 0) {
+                const historicalCAGR = Math.pow(recentPrice / threeYearAgoPrice, 1/3) - 1;
+                if (historicalCAGR >= -0.5 && historicalCAGR <= 1.0) {
+                  historicalReturn = historicalCAGR;
+                  components.historical3year = historicalReturn;
+                }
+              }
+            }
+          }
+          
+          // Blend the returns (weighted average)
+          let blendedReturn = analystReturn;
+          let weights = { analyst: 1.0 };
+          
+          if (epsReturn !== null && historicalReturn !== null) {
+            // All three available: 50% analyst, 25% EPS, 25% historical
+            blendedReturn = (analystReturn * 0.5) + (epsReturn * 0.25) + (historicalReturn * 0.25);
+            weights = { analyst: 0.5, eps: 0.25, historical: 0.25 };
+            method = 'blended_all';
+            confidence = 'high';
+          } else if (epsReturn !== null) {
+            // Analyst + EPS: 60% analyst, 40% EPS
+            blendedReturn = (analystReturn * 0.6) + (epsReturn * 0.4);
+            weights = { analyst: 0.6, eps: 0.4 };
+            method = 'blended_analyst_eps';
+            confidence = 'high';
+          } else if (historicalReturn !== null) {
+            // Analyst + Historical: 60% analyst, 40% historical
+            blendedReturn = (analystReturn * 0.6) + (historicalReturn * 0.4);
+            weights = { analyst: 0.6, historical: 0.4 };
+            method = 'blended_analyst_historical';
+            confidence = 'high';
+          } else {
+            // Only analyst available
+            method = 'analyst_target';
+            confidence = 'medium';
+          }
+          
+          expectedReturn = blendedReturn;
+          components.weights = weights;
         }
       }
     }
@@ -234,6 +299,7 @@ function calculateExpectedReturn(data) {
     expectedReturn: Math.round(expectedReturn * 10000) / 10000, // Round to 4 decimal places
     method: method,
     confidence: confidence,
+    components: components,
     calculatedAt: new Date().toISOString(),
     userOverride: null
   };
@@ -271,14 +337,16 @@ async function getCachedData(symbol) {
     
     const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     
-    // Check if cache is expired (24 hours)
-    const CACHE_DURATION = 24 * 60 * 60 * 1000;
-    const isExpired = (Date.now() - cacheData.timestamp) > CACHE_DURATION;
+    // Cache is now persistent - only manual refresh removes it
+    // TTL check kept for future use but not enforced
+    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours (for reference)
+    const age = Date.now() - cacheData.timestamp;
+    const isStale = age > CACHE_DURATION;
     
-    if (isExpired) {
-      console.log(`Comprehensive cache expired for ${symbol}, removing...`);
-      fs.unlinkSync(cacheFile);
-      return null;
+    if (isStale) {
+      console.log(`Using STALE cache for ${symbol} (${Math.round(age / (1000 * 60 * 60))}h old) - serving anyway to preserve API quota`);
+    } else {
+      console.log(`Using fresh cache for ${symbol} (${Math.round(age / (1000 * 60))}m old)`);
     }
     
     return cacheData;

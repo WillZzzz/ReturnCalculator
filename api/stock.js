@@ -113,14 +113,15 @@ async function getCachedData(symbol) {
     
     const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     
-    // Check if cache is expired (24 hours)
-    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-    const isExpired = (Date.now() - cacheData.timestamp) > CACHE_DURATION;
+    // Cache is now persistent - only manual refresh removes it
+    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours (for reference)
+    const age = Date.now() - cacheData.timestamp;
+    const isStale = age > CACHE_DURATION;
     
-    if (isExpired) {
-      console.log(`Cache expired for ${symbol}, removing...`);
-      fs.unlinkSync(cacheFile);
-      return null;
+    if (isStale) {
+      console.log(`Cache is stale for ${symbol} (${Math.round(age / (1000 * 60 * 60))}h old), but using cached data to preserve API quota`);
+    } else {
+      console.log(`Using fresh cache for ${symbol} (${Math.round(age / (1000 * 60))}m old)`);
     }
     
     return cacheData;
