@@ -929,7 +929,10 @@ const PortfolioAnalyzer = () => {
                   {categoryName}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {categorySecurities.map((recommendation) => {
+                  {categorySecurities.map((symbol) => {
+                    const recommendation = popularRecommendations.find(r => r.symbol === symbol);
+                    if (!recommendation) return null;
+                    
                     const isAlreadyAdded = securities.some(s => s.symbol.toLowerCase() === recommendation.symbol.toLowerCase());
                     
                     return (
