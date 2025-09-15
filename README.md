@@ -309,15 +309,44 @@ vercel logs --follow
 
 ## Future Enhancements
 
-### Potential Improvements
+### Planned Features
+
+#### **Phase 1: User Experience Enhancements**
+- **Local Portfolio Saving**: Save portfolios to browser storage without accounts
+- **Email Portfolio Delivery**: Send analysis results via email (no signup required)
+- **Popular Securities Recommendations**: Show trending stocks and ETFs on homepage
+- **Portfolio Templates**: Pre-built portfolios (Conservative, Aggressive, Dividend-focused)
+- **Enhanced Mobile Experience**: Further responsive design improvements
+
+#### **Phase 2: User Management & Persistence**
+- **Magic Link Authentication**: Passwordless login via email
+- **Portfolio Management Dashboard**: Save, edit, and organize multiple portfolios
+- **Portfolio History**: Track changes and performance over time
+- **Guest to Registered Migration**: Seamlessly upgrade anonymous portfolios to saved accounts
+- **Portfolio Sharing**: Generate shareable links for portfolio analysis
+
+#### **Phase 3: Advanced Analytics**
 - **Portfolio Optimization**: Modern Portfolio Theory integration
-- **Risk Metrics**: Volatility, Sharpe ratio, beta analysis
-- **Dividend Modeling**: Separate dividend growth projections
+- **Risk Metrics**: Volatility, Sharpe ratio, beta analysis, correlation matrix
+- **Dividend Modeling**: Separate dividend growth projections and yield analysis
 - **Sector Diversification**: Automatic portfolio balancing suggestions
-- **Premium API**: Upgrade to remove daily limits
-- **Database Storage**: Replace file cache with proper database
-- **User Accounts**: Personal portfolio persistence
-- **Real-time Updates**: WebSocket integration for live data
+- **Performance Benchmarking**: Compare against multiple indices and custom benchmarks
+- **Monte Carlo Simulations**: Probability-based outcome modeling
+
+#### **Phase 4: Social & Market Features**
+- **Community Portfolios**: Browse and clone popular public portfolios
+- **Usage Analytics**: Track most analyzed securities for better recommendations
+- **Real-time Market Integration**: Live price updates and market news
+- **Alert System**: Notifications for price targets, rebalancing opportunities
+- **Advanced Charting**: Technical analysis tools and custom indicators
+
+#### **Phase 5: Infrastructure & Scaling**
+- **Premium API Integration**: Remove daily API limits with paid Alpha Vantage tier
+- **Database Migration**: Replace file cache with PostgreSQL/Supabase
+- **Background Job Processing**: Queue-based API calls for better performance
+- **WebSocket Integration**: Real-time updates and collaborative features
+- **Multi-currency Support**: International markets and currency conversion
+- **API Rate Limiting**: User-based quotas and premium tiers
 
 ### Known Limitations
 - **API Quota**: 25 daily calls limit real-time functionality
