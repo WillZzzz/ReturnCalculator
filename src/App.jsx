@@ -11,10 +11,15 @@ const PortfolioAnalyzer = () => {
   const [loading, setLoading] = useState(false);
   const [progressStatus, setProgressStatus] = useState({});
   const [searchResults, setSearchResults] = useState({});
+  const [savedPortfolios, setSavedPortfolios] = useState([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [portfolioName, setPortfolioName] = useState('');
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [popularSecurities, setPopularSecurities] = useState([]);
   const searchCache = useRef(new Map());
   const apiSearchCache = useRef(new Map());
+
 
   // Load popular securities from local cache on component mount
   useEffect(() => {
@@ -34,6 +39,18 @@ const PortfolioAnalyzer = () => {
     };
     
     loadPopularSecurities();
+  }, []);
+
+  // Load saved portfolios from localStorage on component mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('savedPortfolios');
+      if (saved) {
+        setSavedPortfolios(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.warn('Error loading saved portfolios:', error);
+    }
   }, []);
 
   // Fallback stock database (used if cache load fails)
@@ -62,6 +79,38 @@ const PortfolioAnalyzer = () => {
 
   // Use popular securities cache or fallback
   const stockDatabase = popularSecurities.length > 0 ? popularSecurities : fallbackStockDatabase;
+
+  // Popular securities recommendations data
+  const popularRecommendations = [
+    // Index Funds & ETFs
+    { symbol: "VOO", name: "Vanguard S&P 500 ETF", category: "🏛️ Index Funds", description: "Low-cost S&P 500 tracking" },
+    { symbol: "VTI", name: "Vanguard Total Stock Market", category: "🏛️ Index Funds", description: "Entire US stock market" },
+    { symbol: "QQQ", name: "Invesco QQQ Trust", category: "💻 Tech ETF", description: "Nasdaq 100 technology focus" },
+    
+    // Mega Cap Stocks
+    { symbol: "AAPL", name: "Apple Inc.", category: "📱 Mega Cap", description: "Consumer electronics leader" },
+    { symbol: "MSFT", name: "Microsoft Corporation", category: "☁️ Cloud & Software", description: "Cloud computing giant" },
+    { symbol: "GOOGL", name: "Alphabet Inc.", category: "🔍 Search & AI", description: "Search and advertising" },
+    
+    // Growth Stocks
+    { symbol: "TSLA", name: "Tesla Inc.", category: "🚗 Electric Vehicles", description: "EV and clean energy" },
+    { symbol: "NVDA", name: "NVIDIA Corporation", category: "🤖 AI & Chips", description: "AI and graphics chips" },
+    
+    // Dividend Stocks
+    { symbol: "JNJ", name: "Johnson & Johnson", category: "💊 Healthcare", description: "Pharmaceutical giant" },
+    { symbol: "PG", name: "Procter & Gamble", category: "🧴 Consumer Goods", description: "Consumer staples" },
+    
+    // International
+    { symbol: "VXUS", name: "Vanguard Total International", category: "🌍 International", description: "Global diversification" }
+  ];
+
+  // Categorized recommendations for organized display
+  const recommendationCategories = {
+    "🏛️ Safe & Steady": ["VOO", "VTI", "VXUS"],
+    "💻 Growth & Tech": ["QQQ", "AAPL", "MSFT", "GOOGL"],
+    "🚀 High Growth": ["TSLA", "NVDA"],
+    "💰 Dividend Income": ["JNJ", "PG"]
+  };
 
   // Helper function to get contribution frequency multiplier
   const getFrequencyMultiplier = (frequency) => {
@@ -224,6 +273,84 @@ const PortfolioAnalyzer = () => {
     setSecurities(securities.map(s => 
       s.id === id ? { ...s, [field]: value } : s
     ));
+  };
+
+  // Portfolio Management Functions
+  const savePortfolio = (name) => {
+    if (!name.trim()) return;
+    
+    const portfolio = {
+      id: Date.now().toString(),
+      name: name.trim(),
+      securities: securities.filter(s => s.symbol && s.contribution),
+      duration,
+      results,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      const updated = [...savedPortfolios, portfolio];
+      setSavedPortfolios(updated);
+      localStorage.setItem('savedPortfolios', JSON.stringify(updated));
+      setShowSaveDialog(false);
+      setPortfolioName('');
+      console.log(`Portfolio "${name}" saved successfully`);
+    } catch (error) {
+      console.error('Error saving portfolio:', error);
+      alert('Error saving portfolio. Please try again.');
+    }
+  };
+
+  const loadPortfolio = (portfolio) => {
+    setSecurities(portfolio.securities);
+    setDuration(portfolio.duration);
+    setResults(portfolio.results);
+    setShowLoadDialog(false);
+    console.log(`Portfolio "${portfolio.name}" loaded successfully`);
+  };
+
+  const deletePortfolio = (portfolioId) => {
+    if (!confirm('Are you sure you want to delete this portfolio?')) return;
+    
+    try {
+      const updated = savedPortfolios.filter(p => p.id !== portfolioId);
+      setSavedPortfolios(updated);
+      localStorage.setItem('savedPortfolios', JSON.stringify(updated));
+      console.log('Portfolio deleted successfully');
+    } catch (error) {
+      console.error('Error deleting portfolio:', error);
+      alert('Error deleting portfolio. Please try again.');
+    }
+  };
+
+  const canSavePortfolio = () => {
+    return securities.some(s => s.symbol && s.contribution) && duration && results;
+  };
+
+  // Add recommended security to portfolio
+  const addRecommendedSecurity = (recommendation) => {
+    // Check if security already exists
+    const exists = securities.some(s => s.symbol.toLowerCase() === recommendation.symbol.toLowerCase());
+    if (exists) {
+      alert(`${recommendation.symbol} is already in your portfolio!`);
+      return;
+    }
+
+    // Find first empty security slot or add new one
+    const emptySlot = securities.find(s => !s.symbol);
+    if (emptySlot) {
+      updateSecurity(emptySlot.id, 'symbol', recommendation.symbol);
+    } else {
+      setSecurities([...securities, { 
+        id: Date.now(), 
+        symbol: recommendation.symbol, 
+        contribution: '', 
+        frequency: 'monthly' 
+      }]);
+    }
+    
+    console.log(`Added ${recommendation.symbol} to portfolio`);
   };
 
   const fetchSecurityData = async (symbol) => {
@@ -515,6 +642,64 @@ const PortfolioAnalyzer = () => {
           <p className="text-sm sm:text-base text-gray-600">Smart search, live data, and growth visualization</p>
         </div>
 
+        {/* Popular Securities Recommendations */}
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            🔥 Popular Investment Choices
+            <span className="text-sm font-normal text-gray-600">Click to add to your portfolio</span>
+          </h2>
+          
+          {/* Quick Add - Most Popular */}
+          <div className="mb-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">⚡ Quick Start</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {popularRecommendations.slice(0, 4).map((rec) => (
+                <button
+                  key={rec.symbol}
+                  onClick={() => addRecommendedSecurity(rec)}
+                  className="p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-left group"
+                >
+                  <div className="font-semibold text-gray-900 group-hover:text-blue-700">{rec.symbol}</div>
+                  <div className="text-xs text-gray-600 truncate">{rec.category}</div>
+                  <div className="text-xs text-gray-500 mt-1 group-hover:text-blue-600">+ Add to portfolio</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Categorized Recommendations */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Object.entries(recommendationCategories).map(([category, symbols]) => (
+              <div key={category} className="bg-white rounded-lg border border-gray-200 p-3">
+                <h4 className="font-medium text-gray-900 mb-2 text-sm">{category}</h4>
+                <div className="space-y-1">
+                  {symbols.map((symbol) => {
+                    const rec = popularRecommendations.find(r => r.symbol === symbol);
+                    if (!rec) return null;
+                    
+                    return (
+                      <button
+                        key={symbol}
+                        onClick={() => addRecommendedSecurity(rec)}
+                        className="w-full text-left p-2 rounded hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-colors group"
+                      >
+                        <div className="font-medium text-sm text-gray-900 group-hover:text-blue-700">{symbol}</div>
+                        <div className="text-xs text-gray-500 truncate group-hover:text-blue-600">{rec.description}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 text-center">
+            <p className="text-xs text-gray-500">
+              💡 Recommendations based on popular investment strategies. Always do your own research.
+            </p>
+          </div>
+        </div>
+
         {/* Input Section */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Investment Configuration</h2>
@@ -616,7 +801,170 @@ const PortfolioAnalyzer = () => {
               <><Calculator size={16} /> Calculate Portfolio</>
             )}
           </button>
+
+          {/* Portfolio Management */}
+          <div className="flex flex-wrap gap-2 mt-4">
+            {savedPortfolios.length > 0 && (
+              <button
+                onClick={() => setShowLoadDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              >
+                📁 Load Portfolio ({savedPortfolios.length})
+              </button>
+            )}
+            
+            {canSavePortfolio() && (
+              <button
+                onClick={() => setShowSaveDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+              >
+                💾 Save Portfolio
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Save Portfolio Dialog */}
+        {showSaveDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">Save Portfolio</h3>
+              <input
+                type="text"
+                placeholder="Enter portfolio name..."
+                value={portfolioName}
+                onChange={(e) => setPortfolioName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 mb-4"
+                onKeyPress={(e) => e.key === 'Enter' && portfolioName.trim() && savePortfolio(portfolioName)}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => portfolioName.trim() && savePortfolio(portfolioName)}
+                  disabled={!portfolioName.trim()}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSaveDialog(false);
+                    setPortfolioName('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Load Portfolio Dialog */}
+        {showLoadDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-96 overflow-y-auto">
+              <h3 className="text-lg font-semibold mb-4">Load Portfolio</h3>
+              {savedPortfolios.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No saved portfolios found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {savedPortfolios.map((portfolio) => (
+                    <div key={portfolio.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900">{portfolio.name}</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {portfolio.securities.length} securities • {portfolio.duration} years
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Securities: {portfolio.securities.map(s => s.symbol).join(', ')}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-2">
+                            Created: {new Date(portfolio.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => loadPortfolio(portfolio)}
+                            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => deletePortfolio(portfolio.id)}
+                            className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowLoadDialog(false)}
+                  className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Popular Securities Recommendations */}
+        {!results && (
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">🚀 Quick Start</h2>
+              <p className="text-gray-600">Not sure where to begin? Try these popular securities to get started with your portfolio analysis!</p>
+            </div>
+            
+            {Object.entries(recommendationCategories).map(([categoryName, categorySecurities]) => (
+              <div key={categoryName} className="mb-6 last:mb-0">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  {categoryName}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {categorySecurities.map((recommendation) => {
+                    const isAlreadyAdded = securities.some(s => s.symbol.toLowerCase() === recommendation.symbol.toLowerCase());
+                    
+                    return (
+                      <button
+                        key={recommendation.symbol}
+                        onClick={() => !isAlreadyAdded && addRecommendedSecurity(recommendation)}
+                        disabled={isAlreadyAdded}
+                        className={`text-left p-4 rounded-lg border transition-all duration-200 ${
+                          isAlreadyAdded 
+                            ? 'bg-gray-100 border-gray-200 cursor-not-allowed opacity-60' 
+                            : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold text-gray-800 text-sm">{recommendation.symbol}</span>
+                          {isAlreadyAdded && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Added</span>
+                          )}
+                        </div>
+                        <h4 className="font-medium text-gray-700 text-sm mb-1 line-clamp-1">{recommendation.name}</h4>
+                        <p className="text-xs text-gray-500 line-clamp-2">{recommendation.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-500">
+                💡 <strong>Tip:</strong> Click any security above to add it to your portfolio, then set your contribution amount and analyze!
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Results Section */}
         {results && (
