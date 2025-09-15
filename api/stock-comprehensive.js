@@ -89,10 +89,11 @@ async function fetchComprehensiveData(symbol, apiKey) {
     historical: null
   };
 
-  // API endpoints
+  // API endpoints - prioritize most important data first
   const endpoints = {
     quote: `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`,
     overview: `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`,
+    // Only fetch earnings and historical if we have enough API quota
     earnings: `https://www.alphavantage.co/query?function=EARNINGS&symbol=${symbol}&apikey=${apiKey}`,
     historical: `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol=${symbol}&apikey=${apiKey}`
   };
@@ -121,9 +122,13 @@ async function fetchComprehensiveData(symbol, apiKey) {
         console.warn(`Failed to fetch ${key} data:`, response.status);
       }
 
-      // Rate limiting delay (Alpha Vantage: 5 calls/minute on free tier)
-      if (key !== 'historical') { // Skip delay for last call
-        await new Promise(resolve => setTimeout(resolve, 12000)); // 12 second delay
+      // Smart rate limiting - reduce delays for essential data
+      if (key === 'quote') {
+        await new Promise(resolve => setTimeout(resolve, 8000)); // 8 second delay
+      } else if (key === 'overview') {
+        await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay  
+      } else if (key !== 'historical') {
+        await new Promise(resolve => setTimeout(resolve, 12000)); // 12 second delay for non-essential
       }
 
     } catch (error) {

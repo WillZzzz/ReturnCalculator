@@ -182,13 +182,34 @@ echo "ALPHA_VANTAGE_KEY=your_key_here" > .env.local
 ```
 
 ### Build & Deploy
-```bash
-# Build for production
-npm run build
 
-# Deploy to Vercel
+#### Deploy to Vercel
+```bash
+# Initial deployment
 vercel deploy
+
+# Set environment variable for production
+vercel env add ALPHA_VANTAGE_KEY production
+# When prompted, enter your Alpha Vantage API key
+
+# Deploy to production
+vercel --prod
 ```
+
+#### Alternative: Set Environment Variables via Dashboard
+1. Go to [vercel.com/dashboard](https://vercel.com/dashboard)
+2. Click on your project → **Settings** → **Environment Variables**
+3. Click **Add New**:
+   - **Name**: `ALPHA_VANTAGE_KEY`
+   - **Value**: `your_alpha_vantage_api_key_here`
+   - **Environment**: Select **Production** (and Preview/Development if needed)
+4. Click **Save**
+5. **Redeploy** your project (Deployments → ... → Redeploy)
+
+#### Important Notes
+- ⚠️ **Environment variables must be set in Vercel dashboard/CLI** - local `.env.local` files are ignored in production
+- 🔑 **Never commit API keys** to the repository
+- 🔄 **Redeploy after setting environment variables** for changes to take effect
 
 ## Technical Decisions & Trade-offs
 
@@ -249,6 +270,42 @@ Each API response is scored on data completeness:
 - Comprehensive try-catch blocks
 - Detailed logging for debugging
 - User-friendly error messages
+
+## Troubleshooting
+
+### Common Deployment Issues
+
+#### "ALPHA_VANTAGE_KEY environment variable not set"
+**Cause**: Environment variable not configured in Vercel
+**Solution**: 
+```bash
+vercel env add ALPHA_VANTAGE_KEY production
+# Enter your API key when prompted
+vercel --prod  # Redeploy
+```
+
+#### API Returns Rate Limit Messages
+**Cause**: Exceeded 25 daily API calls on free Alpha Vantage tier
+**Solution**: 
+- Use cached data (system automatically serves stale cache)
+- Wait until next day for quota reset
+- Upgrade to premium Alpha Vantage plan
+
+#### "No data found for symbol"
+**Cause**: Invalid symbol or symbol not supported by Alpha Vantage
+**Solution**: 
+- Verify symbol exists (use search feature)
+- Try alternative symbol format (e.g., BRK.A vs BRKA)
+- Check if symbol is delisted or merged
+
+### Viewing Logs
+```bash
+# View real-time deployment logs
+vercel logs --follow
+
+# Check function logs in Vercel dashboard
+# Dashboard → Your Project → Functions → Click function name
+```
 
 ## Future Enhancements
 

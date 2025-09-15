@@ -9,6 +9,7 @@ const PortfolioAnalyzer = () => {
   const [duration, setDuration] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [progressStatus, setProgressStatus] = useState({});
   const [searchResults, setSearchResults] = useState({});
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [popularSecurities, setPopularSecurities] = useState([]);
@@ -340,11 +341,28 @@ const PortfolioAnalyzer = () => {
 
   const calculatePortfolioPerformance = async () => {
     setLoading(true);
+    setProgressStatus({});
+    
     try {
       const durationYears = parseInt(duration);
+      const validSecurities = securities.filter(s => s.symbol && s.contribution);
+      
+      // Show initial progress
+      setProgressStatus({
+        message: `Analyzing ${validSecurities.length} securities... This may take 1-2 minutes.`,
+        total: validSecurities.length,
+        current: 0
+      });
       
       const securityData = await Promise.all(
-        securities.filter(s => s.symbol && s.contribution).map(async (security) => {
+        validSecurities.map(async (security, index) => {
+          // Update progress for each security
+          setProgressStatus(prev => ({
+            ...prev,
+            current: index + 1,
+            message: `Fetching ${security.symbol} data... (${index + 1}/${validSecurities.length})`
+          }));
+          
           const data = await fetchSecurityData(security.symbol.toUpperCase());
           return { ...security, data };
         })
@@ -390,6 +408,7 @@ const PortfolioAnalyzer = () => {
       console.error('Calculation error:', error);
     } finally {
       setLoading(false);
+      setProgressStatus({});
     }
   };
 
@@ -586,7 +605,16 @@ const PortfolioAnalyzer = () => {
             disabled={loading || !duration || securities.some(s => !s.symbol || !s.contribution)}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 text-base"
           >
-            {loading ? 'Loading...' : <><Calculator size={16} /> Calculate Portfolio</>}
+{loading ? (
+              progressStatus.message ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  {progressStatus.message}
+                </>
+              ) : 'Loading...'
+            ) : (
+              <><Calculator size={16} /> Calculate Portfolio</>
+            )}
           </button>
         </div>
 
